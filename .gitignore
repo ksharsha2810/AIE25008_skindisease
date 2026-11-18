@@ -1,0 +1,23 @@
+# Credentials (never commit)
+kaggle.json
+.env
+*.key
+
+# Datasets, caches and generated artifacts
+skin_pipeline_artifacts/
+data/
+.cache/
+.tmp/
+results/
+root/
+figures/
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/

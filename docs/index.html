@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIE25008_skindisease – Lightweight Skin Lesion &amp; Acne Severity Demo</title>
+<meta name="description" content="In-browser demo of a lightweight PP-LCNet + CBAM skin lesion classifier with Monte Carlo dropout uncertainty, class activation maps and an acne severity head.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>AIE25008_skindisease</h1>
+  <p class="subtitle">Lightweight skin lesion classification and acne severity grading with uncertainty-aware referral</p>
+  <nav>
+    <a href="#demo">Live demo</a>
+    <a href="#how">How it works</a>
+    <a href="#results">Results</a>
+    <a href="https://github.com/ksharsha2810/AIE25008_skindisease">Source code</a>
+  </nav>
+</header>
+
+<div class="warning">
+  <strong>Research prototype, not a medical device.</strong> Predictions are produced by a model trained on public research datasets and
+  must not be used for diagnosis or treatment decisions. Images are processed entirely in your browser and are never uploaded.
+</div>
+
+<main>
+<section id="demo">
+  <h2>Live demo</h2>
+  <p>Upload a dermoscopic image of a skin lesion, or try one of the HAM10000 test images below. The model runs locally in your browser
+     (ONNX Runtime Web, about 4&nbsp;MB).</p>
+
+  <div class="controls">
+    <label class="upload">Choose image<input type="file" id="file" accept="image/*"></label>
+    <span id="status">Loading model…</span>
+  </div>
+  <div class="samples" id="samples"></div>
+  <p class="note">Sample images are HAM10000 test-split images (Tschandl et al., 2018, CC BY-NC 4.0) that the model classifies correctly; on the
+     full test split its accuracy is 78.2% and macro-F1 51.4%. The browser resizes images slightly differently from the Python pipeline,
+     so probabilities can differ from the notebook by a few percentage points.</p>
+
+  <div class="output" id="output" hidden>
+    <div class="images">
+      <figure><canvas id="input" width="224" height="224"></canvas><figcaption>Model input (224×224 centre crop)</figcaption></figure>
+      <figure><canvas id="cam" width="224" height="224"></canvas><figcaption>Class activation map for the predicted class</figcaption></figure>
+    </div>
+    <div class="panels">
+      <div class="panel">
+        <h3>Skin lesion (HAM10000, 7 classes)</h3>
+        <div id="referral"></div>
+        <table id="lesionTable"></table>
+        <p class="meta" id="lesionMeta"></p>
+      </div>
+      <div class="panel">
+        <h3>Acne severity head (ACNE04, grades 1–4)</h3>
+        <p class="caution">Only meaningful for facial acne photographs. For lesion images this grade is not clinically applicable.</p>
+        <table id="acneTable"></table>
+        <p class="meta" id="acneMeta"></p>
+      </div>
+    </div>
+    <div class="panel report">
+      <h3>Structured report</h3>
+      <p class="meta">Fixed sentence template filled only with the model outputs above. In the full pipeline an LLM (Gemini) formats this text,
+         and a deterministic verifier rejects any output that changes or adds facts.</p>
+      <ol id="report"></ol>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><b>Pre-processing.</b> Resize shorter side to 224&nbsp;px, centre crop 224×224, ImageNet normalisation.</li>
+    <li><b>Frozen backbone.</b> ImageNet-pretrained PP-LCNet-1.0 produces a 512×7×7 feature map.</li>
+    <li><b>CBAM attention.</b> Channel and spatial attention re-weight the features before global average pooling.</li>
+    <li><b>Two task heads.</b> A 7-class lesion head (trained on HAM10000) and a 4-grade acne head (trained on ACNE04) share the pooled features.</li>
+    <li><b>Monte Carlo dropout.</b> 30 stochastic passes (dropout 0.3) give the mean probabilities and the normalised predictive entropy.
+        Cases with entropy above 0.4 are flagged for specialist review.</li>
+    <li><b>Explanation.</b> The class activation map weights the attention-refined feature map by the predicted class's head weights.</li>
+    <li><b>Reporting.</b> A schema-validated JSON payload is turned into text; any text that differs from the payload is rejected.</li>
+  </ol>
+  <p>Data are split by lesion (HAM10000) or patient (PAD-UFES-20) and de-duplicated with SHA-256 hashes, so images of one lesion never
+     appear in both training and test sets.</p>
+</section>
+
+<section id="results">
+  <h2>Results on held-out test sets</h2>
+  <table class="results">
+    <thead><tr><th>Task</th><th>Model</th><th>Accuracy</th><th>Macro-F1</th><th>Other</th></tr></thead>
+    <tbody>
+      <tr><td>HAM10000, 7 classes (2,003 test images)</td><td>Deployed PP-LCNet + CBAM</td><td>78.18%</td><td>51.40%</td><td>ECE 0.023, macro AUC 0.932</td></tr>
+      <tr><td>ACNE04, 4 grades (284 test images)</td><td>Deployed acne head</td><td>60.56%</td><td>51.68%</td><td>Quadratic kappa 0.649</td></tr>
+      <tr><td>Referral rule (entropy &gt; 0.4), HAM10000</td><td colspan="2">Refers 38.1% of cases</td><td colspan="2">Catches 81.3% of errors; 93.3% accuracy on retained cases</td></tr>
+    </tbody>
+  </table>
+  <p>Model size: about 1.04&nbsp;M executed parameters, 0.15 GMACs, around 15&nbsp;ms per image on a laptop CPU. Minority classes such as
+     melanoma and dermatofibroma remain hard; see the repository for the full evaluation.</p>
+</section>
+</main>
+
+<footer>
+  <p>AIE25008_skindisease · Jayakrishnan Anandakrishnan and K S Harsha Vardhan ·
+     <a href="https://github.com/ksharsha2810/AIE25008_skindisease">GitHub</a></p>
+  <p>Datasets: HAM10000 (Tschandl et al., Scientific Data 2018), PAD-UFES-20 (Pacheco et al., Data in Brief 2020),
+     ACNE04 (Wu et al., ICCV 2019).</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
